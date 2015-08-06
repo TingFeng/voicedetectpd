@@ -29,6 +29,7 @@ AudioFile=os.listdir('/mnt/hgfs/InsightVoiceData/output')
 # initiate the numpy array for eight features of each voice sample
 Prop=np.zeros(shape=(len(AudioFile),8))
 
+count=0
 for Audio in AudioFile:
     data,Fs=sf.read(Audio) # read audio data
     Trans=np.zeros(shape=(200,251)) # we only look at 0-5000Hz
@@ -54,9 +55,12 @@ for Audio in AudioFile:
     check=np.diff(np.concatenate((a,c,a), axis=1))
     SS=np.where(check==1)
     EE=np.where(check==-1)
-    Prop[audio,0:3]=np.array([[50*(SS[0][0]+1),50*(201-EE[0][-1]),std(Power[SS[0]:EE[0][-1])]])
+    Prop[count,0:3]=np.array([50*(SS[0][0]),50*(200-EE[0][-1]),np.std(Power[SS[0][0]:EE[0][-1]-1])])
+    
     # program continues... I'm updating all my Matlab code in Phython
     # I will try to get it done as soon as possible
+    
+    count=count+1
   
 
 
