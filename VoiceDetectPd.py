@@ -40,7 +40,7 @@ for Audio in AudioFile:
         sp=sp.T
         freq=fftfreq(t.size,d=1.0/Fs)
         Trans[Index-1,]=2*abs(sp[0:251].T)
-    Power=sum(Trans,1) # note this is not the actual power
+    Power=Trans.sum(axis=1) # note this is not the actual power
                        # rather it is the summed amplitude
                        # power is the square of amplitude
     Power[np.where(np.isnan(Power))]=0 
