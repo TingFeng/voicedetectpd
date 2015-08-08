@@ -19,7 +19,7 @@ import os # for find files in a path
 import numpy as np # for numpy array and related
 from numpy.fft import fft, fftfreq # for Fourier transform
 import soundfile as sf # for extracting converted wave file
-from scipy import stats, signal # for zsore and find peaks
+from scipy import stats, signal # for zsore, pearson correlation and find peaks
 import csv # for read in csv files
 
 # navigate to the folder of .wav files, each file is named with the audio ID
@@ -87,6 +87,72 @@ for Audio in AudioFile:
     Prop[count,4]=np.std(stats.zscore(Pitch[SS[0][0]+t[0]]))
     
     
+    Coff=np.zeros(shape=(199,1)) # qantify the frequency consistency
+    for i in np.arange(0,199):
+        a=stats.pearsonr(Trans[i,],Trans[i+1,])
+        Coff[i]=a[0]
+    Prop[count,5]=mean(Coff) 
+        
+    # next we quantify the variance of peak frequency within each formant frequency    
+    Formant=np.zeros(shape=(200,2));
+    Range=[[500, 925], [925, 1225], [2000, 3000], [3000, 4000]];
+    # putting four formant frequency range in a List
+    # note these ranges are setted by experience, and only the 3rd and 4th formant are used as features
+    for i in np.arange(0,200):
+        for j in np.arange(0,2):
+            t=np.where((freq>Range[j+2][0])*(freq<Range[j+2][1]))
+            b=np.where(Trans[i,t]==np.max(Trans[i,t]))
+            Formant[i][j]=t[0][b[1]]            
+    Prop[count,6:8]=np.array([np.std(Formant[SS[0][0]:EE[0][-1],0]),np.std(Formant[SS[0][0]:EE[0][-1],1])])   
+  
     count=count+1
-    # program continues... I'm updating all my Matlab code in Phython
-    # I will try to get it done as soon as possible
+    
+# Great, now that we calculated all the eight features of voice
+# let's load the meta data, mark the voice with people and medication stage
+
+RecordID=np.zeros(shape=(15744,1)) # audio file name
+MedID=np.zeros(shape=(15744,1)) # medication stage
+HealthCode=np.empty(15744,dtype='S36') # user ID
+cr=csv.reader(open('/mnt/hgfs/InsightVoiceData/VoiceInfo.csv')) # this table contains e.g. time, people, recoring ID 
+count=0
+for row in cr:    
+    # print row[2],row[-2] 
+    if count>0:  
+        HealthCode[count-1]=row[3]
+        if len(row[9])>0: # else it can be np.nan, for now we use 0
+           RecordID[count-1]=np.asarray(row[9])                 
+        # row[19] is the medication stage
+        if len(row[19])==39:
+            MedID[count-1]=np.array([4]) # immediately before medication
+        elif len(row[19])==46:
+            MedID[count-1]=np.array([2]) # immediately after medication (at the best)
+        elif len(row[19])==12:
+            MedID[count-1]=np.array([3]) # another time - intermedian stage
+        elif len(row[19])>0:
+            MedID[count-1]=np.array([1]) # do not take medication                       
+    count=count+1
+    
+PatientID=np.empty(54,dtype='S36') # user ID
+Diagnosis=np.zeros(shape=(54,1)) # professionally diagonosis 1; otherwise 0
+cr=csv.reader(open('/mnt/hgfs/InsightVoiceData/PatientInfo.csv')) # this table contains patients' meta data
+count=0
+for row in cr:
+    if count>0:
+        PatientID[count-1]=row[3]
+        if len(row[29])==6:
+            Diagnosis[count-1]=np.array([1])
+    count=count+1
+
+# match PatientID with HealthCode
+DiagnosisID=np.zeros(shape=(15744,2)) # patient ID, medication state                                     
+Totalppl=np.unique(HealthCode) # the voice recordings come from 50 ppl (PatientInfo table has replicates)
+pplDiag=np.zeros(len(Totalppl)) # 50ppl patient as 1, control as 0
+for i in np.arange(0,len(Totalppl)):
+    tt=np.where(PatientID==Totalppl[i])
+    t=np.where(HealthCode==PatientID[tt[0][0]])
+    DiagnosisID[t[0],0]=i
+    DiagnosisID[t[0],1]=Diagnosis[tt[0][0]]
+    pplDiag[i]=Diagnosis[tt[0][0]]
+
+# program continues... I'm updating all my Matlab code in Phython
+# I will try to get it done as soon as possible
