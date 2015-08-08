@@ -20,6 +20,7 @@ import numpy as np # for numpy array and related
 from numpy.fft import fft, fftfreq # for Fourier transform
 import soundfile as sf # for extracting converted wave file
 from scipy import stats, signal # for zsore, pearson correlation and find peaks
+from sklearn.linear_model import LogisticRegression # for logistic regression
 import csv # for read in csv files
 
 # navigate to the folder of .wav files, each file is named with the audio ID
@@ -29,9 +30,11 @@ AudioFile=os.listdir('/mnt/hgfs/InsightVoiceData/output')
 
 # initiate the numpy array for eight features of each voice sample
 Prop=np.zeros(shape=(len(AudioFile),8))
+VoiceID=np.zeros(shape=(len(AudioFile),1)) # audio file name
 
 count=0
 for Audio in AudioFile:
+    VoiceID[count]=np.asarray(Audio[0:7],dtype='float64')
     data,Fs=sf.read(Audio) # read audio data
     Trans=np.zeros(shape=(200,251)) # we only look at 0-5000Hz
     for Index in np.arange(1,201,step=1):
@@ -91,7 +94,7 @@ for Audio in AudioFile:
     for i in np.arange(0,199):
         a=stats.pearsonr(Trans[i,],Trans[i+1,])
         Coff[i]=a[0]
-    Prop[count,5]=mean(Coff) 
+    Prop[count,5]=np.mean(Coff) 
         
     # next we quantify the variance of peak frequency within each formant frequency    
     Formant=np.zeros(shape=(200,2));
@@ -154,5 +157,56 @@ for i in np.arange(0,len(Totalppl)):
     DiagnosisID[t[0],1]=Diagnosis[tt[0][0]]
     pplDiag[i]=Diagnosis[tt[0][0]]
 
-# program continues... I'm updating all my Matlab code in Phython
-# I will try to get it done as soon as possible
+# match voice recordings with index (because some of the voice recordings are not download-able)
+
+ID_Diagnosis=np.zeros(shape=(len(AudioFile),2))
+count=0
+for i in VoiceID:
+    t=np.where(RecordID==i)
+    if len(t[0])==0:
+        VoiceID=np.delete(VoiceID,count,axis=0)
+        Prop=np.delete(Prop,count,axis=0)
+    else:               
+        ID_Diagnosis[count,]=DiagnosisID[t[0],]
+        count=count+1
+if ID_Diagnosis[:,0].size>count:
+    ID_Diagnosis=np.delete(ID_Diagnosis,np.arange(count,ID_Diagnosis[:,0].size),axis=0)
+        
+# a=[x for x in RecordID if not x in VoiceID]
+
+
+# use logistic regression
+
+# Note I'm only using voice recordings from control subjects
+# and a subset from patients' voice recordings that are immediately taken before medication
+# because there should be their personal worst
+
+# Also I make sure that recordings from different people went into
+# training and testing datasets, to avoide the common mistake that 
+# using a subset of an individual's voice recording to predict the other subset recording from the same person
+
+# traning set: t11 for control subjects, t21 for patients
+# testing set: t12 for control subjects, t22 for patients
+
+TT=np.where(pplDiag==0)
+t11=np.where((ID_Diagnosis[:,1]==0)*(ID_Diagnosis[:,0]<=TT[0][3])*(~np.isnan(Prop.sum(axis=1)))*(Prop.sum(axis=1)!=0))
+t12=np.where((ID_Diagnosis[:,1]==0)*(ID_Diagnosis[:,0]>TT[0][3])*(~np.isnan(Prop.sum(axis=1)))*(Prop.sum(axis=1)!=0))
+
+TT=np.where(pplDiag==1)
+t21=np.where((ID_Diagnosis[:,1]==4)*(ID_Diagnosis[:,0]<=TT[0][14])*(~np.isnan(Prop.sum(axis=1)))*(Prop.sum(axis=1)!=0))
+t22=np.where((ID_Diagnosis[:,1]==4)*(ID_Diagnosis[:,0]>TT[0][19])*(ID_Diagnosis[:,0]<=TT[0][29])*(~np.isnan(Prop.sum(axis=1)))*(Prop.sum(axis=1)!=0))
+
+x=np.append(Prop[t11[0]],Prop[t21[0]],axis=0)
+y=np.append(np.zeros(shape=(t11[0].size,1)),np.ones(shape=(t21[0].size,1)),axis=0)
+
+model = LogisticRegression()
+model = model.fit(X, y)
+# check the accuracy on the training set
+model.score(X, y)
+
+# for testing datasets
+x=np.append(Prop[t12[0]],Prop[t22[0]],axis=0)
+y=np.append(np.zeros(shape=(t12[0].size,1)),np.ones(shape=(t22[0].size,1)),axis=0)
+
+# check the accuracy on the testing set
+model.score(x, y)
